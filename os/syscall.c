@@ -37,7 +37,7 @@ uint64 sys_gettimeofday(TimeVal *val, int _tz)
 }
 
 /*
-* LAB1: you may need to define sys_task_info here
+* LAB1: you may need to define sys_trace here
 */
 
 extern char trap_page[];
@@ -51,7 +51,7 @@ void syscall()
 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],
 	       args[1], args[2], args[3], args[4], args[5]);
 	/*
-	* LAB1: you may need to update syscall counter for task info here
+	* LAB1: you may need to update syscall counter here
 	*/
 	switch (id) {
 	case SYS_write:
@@ -67,7 +67,7 @@ void syscall()
 		ret = sys_gettimeofday((TimeVal *)args[0], args[1]);
 		break;
 	/*
-	* LAB1: you may need to add SYS_taskinfo case here
+	* LAB1: you may need to add SYS_trace case here
 	*/
 	default:
 		ret = -1;

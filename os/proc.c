@@ -81,9 +81,6 @@ void scheduler(void)
 	for (;;) {
 		for (p = pool; p < &pool[NPROC]; p++) {
 			if (p->state == RUNNABLE) {
-				/*
-				* LAB1: you may need to init proc start time here
-				*/
 				p->state = RUNNING;
 				current_proc = p;
 				swtch(&idle.context, &p->context);
