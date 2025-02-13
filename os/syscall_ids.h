@@ -278,7 +278,7 @@
 #define SYS_rseq 293
 #define SYS_kexec_file_load 294
 /*
-* LAB1: you may need to define SYS_task_info here
+* LAB1: you may need to define SYS_trace here
 */
 
 

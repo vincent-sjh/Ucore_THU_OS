@@ -45,10 +45,6 @@ struct proc {
 	*/
 };
 
-/*
-* LAB1: you may need to define struct for TaskInfo here
-*/
-
 struct proc *curr_proc();
 void exit(int);
 void proc_init();

@@ -63,7 +63,7 @@ uint64 sys_sbrk(int n)
 // hint: read through docstrings in vm.c. Watching CH4 video may also help.
 // Note the return value and PTE flags (especially U,X,W,R)
 /*
-* LAB1: you may need to define sys_task_info here
+* LAB1: you may need to define sys_trace here
 */
 
 extern char trap_page[];
@@ -77,7 +77,7 @@ void syscall()
 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],
 	       args[1], args[2], args[3], args[4], args[5]);
 	/*
-	* LAB1: you may need to update syscall counter for task info here
+	* LAB1: you may need to update syscall counter here
 	*/
 	switch (id) {
 	case SYS_write:
@@ -96,7 +96,7 @@ void syscall()
 		ret = sys_sbrk(args[0]);
 		break;
 	/*
-	* LAB1: you may need to add SYS_taskinfo case here
+	* LAB1: you may need to add SYS_trace case here
 	*/
 	default:
 		ret = -1;
