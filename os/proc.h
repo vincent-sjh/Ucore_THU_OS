@@ -4,7 +4,7 @@
 #include "riscv.h"
 #include "types.h"
 
-#define NPROC (16)
+#define NPROC (24)
 
 // Saved registers for kernel context switches.
 struct context {
