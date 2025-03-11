@@ -33,10 +33,14 @@ void proc_init(void)
 		/*
 		* LAB1: you may need to initialize your new fields of proc here
 		*/
+		for (int i=0;i<450;i++){
+			p->syscall_num[i] = 0;
+		}
 	}
 	idle.kstack = (uint64)boot_stack_top;
 	idle.pid = 0;
 	current_proc = &idle;
+	
 }
 
 int allocpid()

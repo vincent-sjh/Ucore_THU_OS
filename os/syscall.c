@@ -65,6 +65,20 @@ uint64 sys_sbrk(int n)
 /*
 * LAB1: you may need to define sys_trace here
 */
+int sys_trace(int trace_request, unsigned long id, uint8 data)
+{
+	if(trace_request==0){
+		return *(uint8*)id;
+	}
+	if(trace_request==1){
+		*(uint8*)id = data;
+		return 0;
+	}
+	if(trace_request==2){
+		return curr_proc()->syscall_num[id];
+	}
+	return -1;
+}
 
 extern char trap_page[];
 
@@ -79,6 +93,8 @@ void syscall()
 	/*
 	* LAB1: you may need to update syscall counter here
 	*/
+	curr_proc()->syscall_num[id]++;
+
 	switch (id) {
 	case SYS_write:
 		ret = sys_write(args[0], args[1], args[2]);
@@ -98,6 +114,9 @@ void syscall()
 	/*
 	* LAB1: you may need to add SYS_trace case here
 	*/
+	case SYS_trace:
+		ret = sys_trace(args[0],args[1],args[2]);
+		break;
 	default:
 		ret = -1;
 		errorf("unknown syscall %d", id);
