@@ -98,6 +98,8 @@ found:
 	memset((void *)p->files, 0, sizeof(struct file *) * FD_BUFFER_SIZE);
 	p->context.ra = (uint64)usertrapret;
 	p->context.sp = p->kstack + KSTACK_SIZE;
+	p->priority = 16;
+	p->stride = 0;
 	return p;
 }
 
@@ -141,6 +143,7 @@ void scheduler()
 		tracef("swtich to proc %d", p - pool);
 		p->state = RUNNING;
 		current_proc = p;
+		p->stride += 65536/p->priority;
 		swtch(&idle.context, &p->context);
 	}
 }
