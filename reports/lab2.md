@@ -1,5 +1,7 @@
 # lab2
 
+宋建昊 2022010853
+
 ## 功能实现
 
 修改sys_gettimeofday与sys_trace为页表版本，使用copyin/copyout函数进行操作。

@@ -9,7 +9,6 @@ struct queue {
 	int front;
 	int tail;
 	int empty;
-	struct proc *pool;
 };
 
 void init_queue(struct queue *);
