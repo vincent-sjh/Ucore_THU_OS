@@ -36,8 +36,11 @@ uint64 sys_sched_yield()
 uint64 sys_gettimeofday(TimeVal *val, int _tz) // TODO: implement sys_gettimeofday in pagetable. (VA to PA)
 {
 	// YOUR CODE
-	val->sec = 0;
-	val->usec = 0;
+	TimeVal val_buffer;
+	uint64 cycle = get_cycle();
+	val_buffer.sec = cycle / CPU_FREQ;
+	val_buffer.usec = (cycle % CPU_FREQ) * 1000000 / CPU_FREQ;
+	copyout(curr_proc()->pagetable, (uint64)val, (char *)&val_buffer, sizeof(TimeVal));
 
 	/* The code in `ch3` will leads to memory bugs*/
 
@@ -57,7 +60,59 @@ uint64 sys_sbrk(int n)
         return addr;	
 }
 
+int sys_mmap(void* start, unsigned long long len, int prot, int flags)
+{
+	uint64 addr_begin = (uint64)start;
+	if (len == 0) {
+		return 0;
+	}
+	// Alignment
+	if ((addr_begin & (PAGE_SIZE - 1)) != 0) {
+		return -1;
+	}
+	// At least one of PROT_READ, PROT_WRITE or PROT_EXEC must be set
+	if ((prot & 0x7) == 0) {
+		return -1;
+	}
+	// Other bits are not allowed
+	if ((prot & ~0x7) != 0) {
+		return -1;
+	}
 
+	uint64 addr_end = addr_begin + PGROUNDUP(len);
+	for (uint64 addr_virtual = addr_begin; addr_virtual != addr_end; addr_virtual += PAGE_SIZE) {
+		void *addr_physical = kalloc();
+		if (addr_physical == 0) {
+			return -1;
+		}
+		int perm = (prot << 1) | PTE_U;
+		int success = mappages(curr_proc()->pagetable, (uint64)addr_virtual, (uint64)PAGE_SIZE, (uint64)addr_physical,perm);
+		if (success != 0) {
+			return -1;
+		}
+	}
+	return 0;
+}
+int sys_munmap(void* start, unsigned long long len)
+{
+	uint64 addr_begin = (uint64)start;
+	if (len == 0) {
+		return 0;
+	}
+	// Alignment
+	if ((addr_begin & (PAGE_SIZE - 1)) != 0) {
+		return -1;
+	}
+	uint64 addr_end = addr_begin + PGROUNDUP(len);
+	for (uint64 addr_virtual = addr_begin; addr_virtual != addr_end; addr_virtual += PAGE_SIZE) {
+		uint64 addr_physical = walkaddr(curr_proc()->pagetable, addr_virtual);
+		if (addr_physical == 0) {
+			return -1;
+		}
+		uvmunmap(curr_proc()->pagetable, addr_virtual, 1, 1);
+	}
+	return 0;
+}
 
 // TODO: add support for mmap and munmap syscall.
 // hint: read through docstrings in vm.c. Watching CH4 video may also help.
@@ -68,10 +123,38 @@ uint64 sys_sbrk(int n)
 int sys_trace(int trace_request, unsigned long id, uint8 data)
 {
 	if(trace_request==0){
-		return *(uint8*)id;
+		uint8 val;
+		pte_t *pte = walk(curr_proc()->pagetable,(uint64)id, 0);
+		if(pte == 0){
+			return -1;
+		}
+		int pte_valid =!(*pte & PTE_V);
+		int pte_user =!(*pte & PTE_U);
+		int pte_read =!(*pte & PTE_R);
+		if(pte_valid || pte_user || pte_read){
+			return -1;
+		}
+		int success = copyin(curr_proc()->pagetable, (char*)&val, (uint64)id, sizeof(uint8));
+		if(success == -1){
+			return -1;
+		}
+		return val;
 	}
 	if(trace_request==1){
-		*(uint8*)id = data;
+		pte_t *pte = walk(curr_proc()->pagetable,(uint64)id, 0);
+		if(pte == 0){
+			return -1;
+		}
+		int pte_valid =!(*pte & PTE_V);
+		int pte_user =!(*pte & PTE_U);
+		int pte_read =!(*pte & PTE_R);
+		if(pte_valid || pte_user || pte_read){
+			return -1;
+		}
+		int success = copyout(curr_proc()->pagetable, (uint64)id, (char*)&data, sizeof(uint8));
+		if(success == -1){
+			return -1;
+		}
 		return 0;
 	}
 	if(trace_request==2){
@@ -116,6 +199,13 @@ void syscall()
 	*/
 	case SYS_trace:
 		ret = sys_trace(args[0],args[1],args[2]);
+		break;
+	case SYS_mmap:
+		ret = sys_mmap((void*)args[0], args[1], args[2],
+			       args[3]);
+		break;
+	case SYS_munmap:
+		ret = sys_munmap((void*)args[0], args[1]);
 		break;
 	default:
 		ret = -1;
