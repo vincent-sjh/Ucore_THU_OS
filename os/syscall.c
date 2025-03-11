@@ -147,8 +147,8 @@ int sys_trace(int trace_request, unsigned long id, uint8 data)
 		}
 		int pte_valid =!(*pte & PTE_V);
 		int pte_user =!(*pte & PTE_U);
-		int pte_read =!(*pte & PTE_R);
-		if(pte_valid || pte_user || pte_read){
+		int pte_write =!(*pte & PTE_W);
+		if(pte_valid || pte_user || pte_write){
 			return -1;
 		}
 		int success = copyout(curr_proc()->pagetable, (uint64)id, (char*)&data, sizeof(uint8));
