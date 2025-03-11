@@ -8,6 +8,8 @@
 #define NPROC (512)
 #define FD_BUFFER_SIZE (16)
 
+
+
 struct file;
 
 // Saved registers for kernel context switches.
@@ -47,7 +49,10 @@ struct proc {
 	struct file *files[FD_BUFFER_SIZE];
 	uint64 program_brk;
 	uint64 heap_bottom;
+	long long priority;
+	long long stride;
 };
+extern struct proc pool[NPROC];
 
 int cpuid();
 struct proc *curr_proc();

@@ -95,12 +95,31 @@ uint64 sys_wait(int pid, uint64 va)
 uint64 sys_spawn(uint64 va)
 {
 	// TODO: your job is to complete the sys call
-	return -1;
+	char program_name[200];
+	copyinstr(curr_proc()->pagetable, program_name, va, 200);
+	int id=get_id_by_name(program_name);
+	if(id<0){
+		return -1;
+	}
+	struct proc *newproc = allocproc();
+	if(newproc== 0){
+		return -1;
+	}
+
+	loader(id, newproc);
+	newproc->parent = curr_proc();
+	add_task(newproc);
+	return newproc->pid;
 }
 
 uint64 sys_set_priority(long long prio){
     // TODO: your job is to complete the sys call
-    return -1;
+    if(prio < 2){
+		return -1;
+	}
+
+	curr_proc()->priority = prio;
+	return prio;
 }
 
 
@@ -136,16 +155,28 @@ int sys_mmap(void* start, unsigned long long len, int prot, int flags)
 	uint64 addr_end = addr_begin + PGROUNDUP(len);
 	for (uint64 addr_virtual = addr_begin; addr_virtual != addr_end; addr_virtual += PAGE_SIZE) {
 		void *addr_physical = kalloc();
+		uint64 max = addr_virtual / PAGE_SIZE;
 		if (addr_physical == 0) {
+			if(max > curr_proc()->max_page){
+				curr_proc()->max_page = max;
+			}
 			return -1;
 		}
 		int perm = (prot << 1) | PTE_U;
 		int success = mappages(curr_proc()->pagetable, (uint64)addr_virtual, (uint64)PAGE_SIZE, (uint64)addr_physical,perm);
 		if (success != 0) {
+			if(max > curr_proc()->max_page){
+				curr_proc()->max_page = max;
+			}
 			return -1;
 		}
 	}
+	uint64 max_ = addr_end / PAGE_SIZE;
+	if(max_ > curr_proc()->max_page){
+		curr_proc()->max_page = max_;
+	}
 	return 0;
+
 }
 int sys_munmap(void* start, unsigned long long len)
 {
@@ -232,6 +263,9 @@ void syscall()
 		break;
 	case SYS_munmap:
 		ret = sys_munmap((void*)args[0], args[1]);
+		break;
+	case SYS_setpriority:
+		ret = sys_set_priority((long long)args[0]);
 		break;
 	default:
 		ret = -1;
