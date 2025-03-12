@@ -9,6 +9,7 @@ void *memset(void *, int, uint);
 char *safestrcpy(char *, const char *, int);
 int strlen(const char *);
 int strncmp(const char *, const char *, uint);
+int strcmp(const char *, const char *);
 char *strncpy(char *, const char *, int);
 
 #endif // STRING_H

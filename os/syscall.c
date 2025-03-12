@@ -6,6 +6,17 @@
 #include "timer.h"
 #include "trap.h"
 
+#define DIR 0x040000              // directory
+#define FILE 0x100000             // ordinary regular file
+
+typedef struct Stat {
+	uint64 dev;
+	uint64 ino;
+	uint32 mode;
+	uint32 nlink;
+	uint64 pad[7];
+} Stat;
+
 uint64 console_write(uint64 va, uint64 len)
 {
 	struct proc *p = curr_proc();
@@ -147,8 +158,9 @@ uint64 sys_spawn(uint64 va)
 	// TODO: your job is to complete the sys call
 	char program_name[200];
 	copyinstr(curr_proc()->pagetable, program_name, va, 200);
-	int id=get_id_by_name(program_name);
-	if(id<0){
+	
+	struct inode* id=namei(program_name);
+	if(id==0){
 		return -1;
 	}
 	struct proc *newproc = allocproc();
@@ -156,9 +168,11 @@ uint64 sys_spawn(uint64 va)
 		return -1;
 	}
 
-	loader(id, newproc);
+	bin_loader(id, newproc);
 	newproc->parent = curr_proc();
+	init_stdio(newproc);
 	add_task(newproc);
+	iput(id);
 	return newproc->pid;
 }
 
@@ -198,20 +212,100 @@ uint64 sys_close(int fd)
 int sys_fstat(int fd, uint64 stat)
 {
 	//TODO: your job is to complete the syscall
-	return -1;
+	struct Stat state;
+	if (fd < 0 || fd >= FD_BUFFER_SIZE ) {
+		return -1;
+	}
+	struct file *f = curr_proc()->files[fd];
+	if(f == 0||f->type == FD_NONE){
+		return -1;
+	}
+	state.dev = f->ip->dev;
+	state.ino = f->ip->inum;
+	if(f->ip->type == T_DIR){
+		state.mode = DIR;
+	}else{
+		state.mode = FILE;
+	}
+
+	state.nlink = f->ip->link_count;
+	int copy = copyout(curr_proc()->pagetable, stat, (char *)&state, sizeof(struct Stat));
+	if(copy == -1){
+		return -1;
+	}
+	return 0;
 }
 
 int sys_linkat(int olddirfd, uint64 oldpath, int newdirfd, uint64 newpath,
 	       uint64 flags)
 {
 	//TODO: your job is to complete the syscall
-	return -1;
+	if(oldpath == 0 || newpath == 0){
+		return -1;
+	}
+	char old_path[DIRSIZ];
+	char new_path[DIRSIZ];
+	int old = copyinstr(curr_proc()->pagetable, old_path, oldpath, DIRSIZ);
+	int new = copyinstr(curr_proc()->pagetable, new_path, newpath, DIRSIZ);
+	if(old == -1 || new == -1){
+		return -1;
+	}
+	if(strcmp(old_path, new_path) == 0){
+		return -1;
+	}
+	struct inode* ip,*old_file,*new_file;
+	ip = root_dir();
+	old_file = dirlookup(ip, old_path, 0);
+	if(old_file == 0){
+		iput(ip);
+		return -1;
+	}
+	ivalid(old_file);
+	new_file = dirlookup(ip, new_path, 0);
+	if(new_file != 0){
+		iput(new_file);
+		iput(ip);
+		iput(old_file);
+		return -1;
+	}
+	if(dirlink(ip, new_path, old_file->inum) < 0){
+		iput(ip);
+		iput(old_file);
+		return -1;
+	}
+	old_file->link_count++;
+	iupdate(old_file);
+	iput(ip);
+	iput(old_file);
+	return 0;
 }
 
 int sys_unlinkat(int dirfd, uint64 name, uint64 flags)
 {
 	//TODO: your job is to complete the syscall
-	return -1;
+	char filename[DIRSIZ];
+	int copy = copyinstr(curr_proc()->pagetable, filename, name, DIRSIZ);
+	if(copy == -1){
+		return -1;
+	}
+	struct inode* ip,*file;
+	ip = root_dir();
+	file = dirlookup(ip, filename, 0);
+	if(file == 0){
+		iput(ip);
+		return -1;
+	}
+	ivalid(file);
+	if(dirunlink(ip, filename) < 0){
+		iput(ip);
+		iput(file);
+		return -1;
+	}
+	file->link_count--;
+	iupdate(file);
+	iput(file);
+	iput(ip);
+	return 0;
 }
 
 uint64 sys_sbrk(int n)

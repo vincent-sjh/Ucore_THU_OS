@@ -137,6 +137,7 @@ void iupdate(struct inode *ip)
 	dip->type = ip->type;
 	dip->size = ip->size;
 	// LAB4: you may need to update link count here
+	dip->link_count = ip->link_count;
 	memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
 	bwrite(bp);
 	brelse(bp);
@@ -190,6 +191,7 @@ void ivalid(struct inode *ip)
 		ip->type = dip->type;
 		ip->size = dip->size;
 		// LAB4: You may need to get lint count here
+		ip->link_count = dip->link_count;
 		memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
 		brelse(bp);
 		ip->valid = 1;
@@ -208,7 +210,7 @@ void ivalid(struct inode *ip)
 void iput(struct inode *ip)
 {
 	// LAB4: Unmark the condition and change link count variable name (nlink) if needed
-	if (ip->ref == 1 && ip->valid && 0 /*&& ip->nlink == 0*/) {
+	if (ip->ref == 1 && ip->valid && ip->link_count == 0) {
 		// inode has no links and no other references: truncate and free.
 		itrunc(ip);
 		ip->type = 0;
@@ -429,7 +431,29 @@ int dirlink(struct inode *dp, char *name, uint inum)
 }
 
 // LAB4: You may want to add dirunlink here
-
+int dirunlink(struct inode *dp, char *name)
+{
+	struct inode *ip = dirlookup(dp, name, 0);
+	if (ip == 0) {
+		return -1;
+	}else{
+		iput(ip);
+	}
+	struct dirent dir_entry;
+	for(int i=0; i<dp->size; i+=sizeof(dir_entry)){
+		if(readi(dp, 0, (uint64)&dir_entry, i, sizeof(dir_entry)) != sizeof(dir_entry)){
+			panic("dirunlink read");
+		}
+		if(strcmp(name, dir_entry.name) == 0&&dir_entry.inum != 0){
+			dir_entry.inum = 0;
+			if(writei(dp, 0, (uint64)&dir_entry, i, sizeof(dir_entry)) != sizeof(dir_entry)){
+				panic("dirunlink write");
+			}
+			return 0;
+		}
+	}
+	return -1;
+}
 //Return the inode of the root directory
 struct inode *root_dir()
 {

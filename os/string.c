@@ -1,6 +1,7 @@
 #include "string.h"
 #include "types.h"
 
+
 void *memset(void *dst, int c, uint n)
 {
 	char *cdst = (char *)dst;
@@ -58,6 +59,13 @@ int strncmp(const char *p, const char *q, uint n)
 	if (n == 0)
 		return 0;
 	return (uchar)*p - (uchar)*q;
+}
+int strcmp(const char *str1, const char *str2) {
+    while (*str1 && *str2 && *str1 == *str2) {
+        str1++;
+        str2++;
+    }
+    return (int)(*str1 - *str2);
 }
 
 char *strncpy(char *s, const char *t, int n)
