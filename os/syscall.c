@@ -6,6 +6,7 @@
 #include "syscall_ids.h"
 #include "timer.h"
 #include "trap.h"
+#include "string.h"
 
 uint64 console_write(uint64 va, uint64 len)
 {
@@ -259,6 +260,7 @@ int sys_mutex_create(int blocking)
 	}
 	// LAB5: (4-1) You may want to maintain some variables for detect here
 	int mutex_id = m - curr_proc()->mutex_pool;
+	curr_proc()->mutex_available[mutex_id] ++;
 	debugf("create mutex %d", mutex_id);
 	return mutex_id;
 }
@@ -271,7 +273,19 @@ int sys_mutex_lock(int mutex_id)
 	}
 	// LAB5: (4-1) You may want to maintain some variables for detect
 	//       or call your detect algorithm here
+	struct proc *p = curr_proc();
+	p->mutex_request[curr_thread()->tid][mutex_id] ++;
+	if(p->deadlock_enabled) {
+		int deadlock = deadlock_detect(p->mutex_available, p->mutex_allocation, p->mutex_request);
+		if (deadlock) {
+			errorf("deadlock detected");
+			return -0xDEAD;
+		}
+	}
 	mutex_lock(&curr_proc()->mutex_pool[mutex_id]);
+	p->mutex_allocation[curr_thread()->tid][mutex_id] ++;
+	p->mutex_request[curr_thread()->tid][mutex_id] --;
+	p->mutex_available[mutex_id] --;
 	return 0;
 }
 
@@ -282,7 +296,12 @@ int sys_mutex_unlock(int mutex_id)
 		return -1;
 	}
 	// LAB5: (4-1) You may want to maintain some variables for detect here
+	struct proc *p = curr_proc();
+	p->mutex_allocation[curr_thread()->tid][mutex_id] --;
+	p->mutex_available[mutex_id] ++;
 	mutex_unlock(&curr_proc()->mutex_pool[mutex_id]);
+
+
 	return 0;
 }
 
@@ -294,7 +313,9 @@ int sys_semaphore_create(int res_count)
 		return -1;
 	}
 	// LAB5: (4-2) You may want to maintain some variables for detect here
+	
 	int sem_id = s - curr_proc()->semaphore_pool;
+	curr_proc()->semaphore_available[sem_id] = res_count;
 	debugf("create semaphore %d", sem_id);
 	return sem_id;
 }
@@ -307,6 +328,9 @@ int sys_semaphore_up(int semaphore_id)
 		return -1;
 	}
 	// LAB5: (4-2) You may want to maintain some variables for detect here
+	struct proc *p = curr_proc();
+	p->semaphore_available[semaphore_id] ++;
+	p->semaphore_allocation[curr_thread()->tid][semaphore_id] --;
 	semaphore_up(&curr_proc()->semaphore_pool[semaphore_id]);
 	return 0;
 }
@@ -320,7 +344,20 @@ int sys_semaphore_down(int semaphore_id)
 	}
 	// LAB5: (4-2) You may want to maintain some variables for detect
 	//       or call your detect algorithm here
+	struct proc *p = curr_proc();
+	p->semaphore_request[curr_thread()->tid][semaphore_id] ++;
+	if(p->deadlock_enabled) {
+		int deadlock = deadlock_detect(p->semaphore_available, p->semaphore_allocation
+			, p->semaphore_request);
+		if (deadlock) {
+			errorf("deadlock detected");
+			return -0xDEAD;
+		}
+	}
 	semaphore_down(&curr_proc()->semaphore_pool[semaphore_id]);
+	p->semaphore_allocation[curr_thread()->tid][semaphore_id] ++;
+	p->semaphore_request[curr_thread()->tid][semaphore_id] --;
+	p->semaphore_available[semaphore_id] --;
 	return 0;
 }
 
@@ -361,9 +398,69 @@ int sys_condvar_wait(int cond_id, int mutex_id)
 	return 0;
 }
 
+
 // LAB5: (2) you may need to define function enable_deadlock_detect here
+int sys_enable_deadlock_detect(int enable)
+{
+	struct proc *p = curr_proc();
+	p->deadlock_enabled = enable;
+	return 0;
+}
 
 extern char trap_page[];
+
+int deadlock_detect(const int available[LOCK_POOL_SIZE],
+	const int allocation[NTHREAD][LOCK_POOL_SIZE],
+	const int request[NTHREAD][LOCK_POOL_SIZE]) {
+	int work[LOCK_POOL_SIZE];           // 工作向量，初始化为 available
+	int finish[NTHREAD] = {0};     // 结束向量，标记线程是否完成
+	int remaining_threads = NTHREAD;    // 未完成的线程数
+	int progress;                      // 是否有进展（找到可运行线程）
+
+	// 初始化 work 向量为 available
+	memcpy(work, available, sizeof(int) * LOCK_POOL_SIZE);
+
+	// 主循环：模拟资源分配，直到所有线程完成或无法继续
+	while (remaining_threads > 0) {
+	progress = 0;
+
+	// 遍历所有线程，寻找可运行的线程
+	for (int i = 0; i < NTHREAD; i++) {
+		if (finish[i]) {
+		continue; // 已完成的线程跳过
+		}
+
+		// 检查线程 i 的请求是否小于等于当前可用资源 (work)
+		int can_run = 1;
+		for (int j = 0; j < LOCK_POOL_SIZE; j++) {
+		if (request[i][j] > work[j]) {
+			can_run = 0;
+			break;
+		}
+		}
+
+		// 如果线程 i 可以运行
+		if (can_run) {
+		// 模拟线程 i 完成，释放其已分配资源
+		for (int j = 0; j < LOCK_POOL_SIZE; j++) {
+			work[j] += allocation[i][j];
+		}
+		finish[i] = 1;      // 标记线程 i 完成
+		remaining_threads--;    // 未完成线程数减 1
+		progress = 1;       // 有进展
+		break;                 // 重新开始循环
+		}
+	}
+
+	// 如果没有找到可运行的线程，且仍有未完成线程，则死锁
+	if (!progress && remaining_threads > 0) {
+	return 1; // 检测到死锁
+	}
+	}
+
+	// 所有线程都完成了，返回 0 表示无死锁
+	return 0;
+}
 
 void syscall()
 {
@@ -455,6 +552,9 @@ void syscall()
 		ret = sys_condvar_wait(args[0], args[1]);
 		break;
 	// LAB5: (2) you may need to add case SYS_enable_deadlock_detect here
+	case SYS_enable_deadlock_detect:
+		ret = sys_enable_deadlock_detect(args[0]);
+		break;
 	default:
 		ret = -1;
 		errorf("unknown syscall %d", id);
